@@ -25,3 +25,16 @@ Backend Tester:
 ## 📁 Project Structure
 
 (TODO)
+
+---
+
+## Setup Instructions
+
+1. Install Dependencies
+npm install
+
+2. Create the .env file
+Ask a fellow developer on the .env details
+
+3. Run the Server
+node server.js
