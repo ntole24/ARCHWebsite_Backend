@@ -77,12 +77,11 @@ router.delete("/:albumId/:photoId", async (req, res) => {
       return res.status(404).json({ error: "Photo not found" });
     }
 
-    // Extract public_id from Cloudinary URL to delete from Cloudinary
     if (photo.link) {
-      // Extract public_id from URL (e.g., from "https://res.cloudinary.com/demo/image/upload/v1234567890/sample.jpg")
+      // separate the public_id from the URL
       const urlParts = photo.link.split('/');
       const publicIdWithExtension = urlParts[urlParts.length - 1];
-      const publicId = publicIdWithExtension.split('.')[0]; // Remove file extension
+      const publicId = publicIdWithExtension.split('.')[0];
       
       // Delete from Cloudinary
       await uploader.destroy(publicId);
@@ -102,6 +101,20 @@ router.get("/", async (req, res) => {
   try {
     const albums = await PhotoAlbum.find().sort({ date: -1 });
     res.json(albums);
+  }
+  catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET: Get a single photo album by ID
+router.get("/:albumId", async (req, res) => {
+  try {
+    const album = await PhotoAlbum.findById(req.params.albumId);
+    if (!album) {
+      return res.status(404).json({ error: "Album not found" });
+    }
+    res.json(album);
   }
   catch (err) {
     res.status(500).json({ error: err.message });
