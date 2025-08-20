@@ -13,15 +13,18 @@ PHOTO ROUTES - Endpoints for managing photo albums and photos within those album
 - Cloudinary will be handling the image uploads and storage.
 
 List of Operations:
-- GET: List all photo albums
-- GET: Get a single photo album by ID
-- GET: List all photos in an album
-- GET: Get a single photo by ID
-- POST: Create a new photo in an album
-- PATCH: Update a photo
-- PATCH: Update photo album
-- DELETE: Remove a photo
-- DELETE: Remove photo album
+GET    /                       → List all albums
+GET    /album/:albumId         → Get single album
+GET    /:albumId/photos        → List photos in album  
+GET    /:albumId/:photoId      → Get single photo
+POST   /:albumId               → Create photo with upload
+PATCH  /:albumId/:photoId      → Update photo
+PATCH  /album/:albumId         → Update album
+DELETE /:albumId/:photoId      → Delete photo
+DELETE /album/:albumId         → Delete album
+POST   /upload                 → Cloudinary upload only
+GET    /cloudinary/:id         → Get Cloudinary info
+DELETE /cloudinary/:id         → Delete from Cloudinary
 */
 
 // [MONGODB CRUD]
@@ -38,7 +41,7 @@ router.get("/", async (req, res) => {
 });
 
 // GET: Get a single photo album by ID
-router.get("/:albumId", async (req, res) => {
+router.get("/album/:albumId", async (req, res) => {
   try {
     const album = await PhotoAlbum.findById(req.params.albumId);
     if (!album) {
@@ -49,10 +52,10 @@ router.get("/:albumId", async (req, res) => {
   catch (err) {
     res.status(500).json({ error: err.message });
   }
-  });
+});
 
-// GET: List all photos in an album
-router.get("/:albumId", async (req, res) => {
+// GET: List all photos in an album 
+router.get("/:albumId/photos", async (req, res) => {
   try {
     const photos = await Photo.find({ album: req.params.albumId }).sort({ date: -1 });
     res.json(photos);
@@ -78,6 +81,15 @@ router.get("/:albumId/:photoId", async (req, res) => {
 router.post("/:albumId", upload.single("image"), async (req, res) => {
   try {
     const { title, contributors } = req.body;
+    let cloudinaryUrl = null;
+    if (req.file) {
+      const result = await uploader.upload(req.file.path);
+      cloudinaryUrl = result.secure_url;
+    }
+    // Check if link is required but missing
+    if (!cloudinaryUrl) {
+      return res.status(400).json({ error: "Image file is required" });
+    }
     const newPhoto = new Photo({
       title,
       link: cloudinaryUrl,
@@ -155,8 +167,11 @@ router.delete("/album/:albumId", async (req, res) => {
 // POST: Upload image to Cloudinary only
 router.post("/upload", upload.single("image"), async (req, res) => {
   try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No image file provided" });
+    }
     const result = await uploader.upload(req.file.path);
-    res.json({ url: result.secure_url });
+    res.json({ url: result.secure_url, publicId: result.public_id });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -185,3 +200,5 @@ router.delete("/cloudinary/:publicId", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+module.exports = router;

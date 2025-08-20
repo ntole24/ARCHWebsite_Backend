@@ -12,11 +12,14 @@ VIDEO ROUTES - Endpoints for managing videos within these albums
 - Cloudinary will be handling the video uploads and storage.
 
 List of Operations:
-- GET: List all videos
-- GET: Get a single video by ID
-- POST: Create a new video
-- PATCH: Update a video
-- DELETE: Remove a video
+GET    /                  → List all videos
+GET    /:id               → Get single video
+POST   /                  → Create video
+PATCH  /:id               → Update video
+DELETE /:id               → Delete video
+POST   /upload            → Cloudinary upload only
+GET    /cloudinary/:id    → Get Cloudinary info
+DELETE /cloudinary/:id    → Delete from Cloudinary
 */
 
 // MONGODB CRUD
@@ -55,27 +58,31 @@ router.post("/", async (req, res) => {
   }
 });
 
-// PATCH: Update a video
+// PATCH: Update a video 
 router.patch("/:id", async (req, res) => {
   try {
     const updated = await Video.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!updated) {
+      return res.status(404).json({ error: "Video not found" });
+    }
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-// DELETE: Remove a video
+// DELETE: Remove a video 
 router.delete("/:id", async (req, res) => {
   try {
-    await Video.findByIdAndDelete(req.params.id);
-    res.sendStatus(204);
+    const deleted = await Video.findByIdAndDelete(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ error: "Video not found" });
+    }
+    res.json({ message: "Video deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
-module.exports = router;
 
 // =================
 // CLOUDINARY CRUD
@@ -88,26 +95,35 @@ router.post("/upload", upload.single("video"), async (req, res) => {
       return res.status(400).json({ error: "No file uploaded" });
     }
     const result = await uploader.upload(req.file.path, { resource_type: "video" });
-    res.json({ url: result.secure_url });
+    res.json({ 
+      url: result.secure_url,
+      publicId: result.public_id,
+      duration: result.duration
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET: Get video info from Cloudinary
+// GET: Get video info from Cloudinary 
 router.get("/cloudinary/:publicId", async (req, res) => {
   try {
-    const result = await uploader.explicit(req.params.publicId, { type: "upload" });
+    const result = await uploader.explicit(req.params.publicId, { 
+      type: "upload",
+      resource_type: "video"
+    });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// DELETE: Remove video from Cloudinary
+// DELETE: Remove video from Cloudinary 
 router.delete("/cloudinary/:publicId", async (req, res) => {
   try {
-    const result = await uploader.destroy(req.params.publicId);
+    const result = await uploader.destroy(req.params.publicId, {
+      resource_type: "video"
+    });
     if (result.result === "ok") {
       res.json({ message: "Video deleted from Cloudinary", result });
     } else {
@@ -117,3 +133,5 @@ router.delete("/cloudinary/:publicId", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+module.exports = router;
