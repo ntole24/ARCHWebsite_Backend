@@ -1,19 +1,55 @@
 const express = require("express");
 const router = express.Router();
-const Video = require("../model/photo");
+const Photo = require("../model/photo");
 const PhotoAlbum = require("../model/photoAlbum");
 const multer = require("multer");
 const upload = multer({ dest: "tmp/" });
 const { uploader } = require("../utils/cloudinary");
 
-/* 
-- ***GET** endpoint retrieves all video entries, sorted by upload date.*
-- *Each video includes:*
-    - *Title, caption, date, embed link, channel, category, contributors, collaborators*
-- ***POST** endpoint allows adding new videos*
-- ***PUT/PATCH** endpoint edits metadata of a video*
-- ***DELETE** endpoint removes a video entry*
+/*
+PHOTO ROUTES - Endpoints for managing photo albums and photos within those albums
+- Each operation will be separated into 2 sections: MongoDB CRUD and Cloudinary CRUD
+- MongoDB operations will be handling the links and the names of the Contributors and more.
+- Cloudinary will be handling the image uploads and storage.
+
+List of Operations:
+- GET: List all photo albums
+- GET: Get a single photo album by ID
+- GET: List all photos in an album
+- GET: Get a single photo by ID
+- POST: Create a new photo in an album
+- PATCH: Update a photo
+- PATCH: Update photo album
+- DELETE: Remove a photo
+- DELETE: Remove photo album
 */
+
+// [MONGODB CRUD]
+
+// GET: List all photo albums
+router.get("/", async (req, res) => {
+  try {
+    const albums = await PhotoAlbum.find().sort({ date: -1 });
+    res.json(albums);
+  }
+  catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET: Get a single photo album by ID
+router.get("/:albumId", async (req, res) => {
+  try {
+    const album = await PhotoAlbum.findById(req.params.albumId);
+    if (!album) {
+      return res.status(404).json({ error: "Album not found" });
+    }
+    res.json(album);
+  }
+  catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+  });
 
 // GET: List all photos in an album
 router.get("/:albumId", async (req, res) => {
@@ -44,7 +80,7 @@ router.post("/:albumId", upload.single("image"), async (req, res) => {
     const { title, contributors } = req.body;
     const newPhoto = new Photo({
       title,
-      link: req.file ? await uploader.upload(req.file.path) : null, // Upload to Cloudinary
+      link: cloudinaryUrl,
       album: req.params.albumId,
       contributors: contributors ? contributors.split(",") : []
     });
@@ -68,55 +104,84 @@ router.patch("/:albumId/:photoId", async (req, res) => {
   }
 });
 
+// PATCH: Update photo album
+router.patch("/album/:albumId", async (req, res) => {
+  try {
+    const updated = await PhotoAlbum.findByIdAndUpdate(req.params.albumId, req.body, { new: true });
+    if (!updated) {
+      return res.status(404).json({ error: "Album not found" });
+    }
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // DELETE: Remove a photo
 router.delete("/:albumId/:photoId", async (req, res) => {
   try {
-    // First, find the photo to get the Cloudinary URL
-    const photo = await Photo.findById(req.params.photoId);
-    if (!photo) {
+    const deleted = await Photo.findByIdAndDelete(req.params.photoId);
+    if (!deleted) {
       return res.status(404).json({ error: "Photo not found" });
     }
-
-    if (photo.link) {
-      // separate the public_id from the URL
-      const urlParts = photo.link.split('/');
-      const publicIdWithExtension = urlParts[urlParts.length - 1];
-      const publicId = publicIdWithExtension.split('.')[0];
-      
-      // Delete from Cloudinary
-      await uploader.destroy(publicId);
-    }
-
-    // Then delete from MongoDB
-    await Photo.findByIdAndDelete(req.params.photoId);
-    
-    res.sendStatus(204);
+    res.json({ message: "Photo metadata deleted", deletedPhoto: deleted });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET: List all photo albums
-router.get("/", async (req, res) => {
+// DELETE: Remove photo album
+router.delete("/album/:albumId", async (req, res) => {
   try {
-    const albums = await PhotoAlbum.find().sort({ date: -1 });
-    res.json(albums);
-  }
-  catch (err) {
+    // First check if album has photos
+    const photosInAlbum = await Photo.find({ album: req.params.albumId });
+    if (photosInAlbum.length > 0) {
+      return res.status(400).json({ 
+        error: "Cannot delete album with existing photos. Delete photos first." 
+      });
+    }
+    const deleted = await PhotoAlbum.findByIdAndDelete(req.params.albumId);
+    if (!deleted) {
+      return res.status(404).json({ error: "Album not found" });
+    }  
+    res.json({ message: "Album deleted successfully" });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET: Get a single photo album by ID
-router.get("/:albumId", async (req, res) => {
+// [CLOUDINARY CRUD]
+
+// POST: Upload image to Cloudinary only
+router.post("/upload", upload.single("image"), async (req, res) => {
   try {
-    const album = await PhotoAlbum.findById(req.params.albumId);
-    if (!album) {
-      return res.status(404).json({ error: "Album not found" });
-    }
-    res.json(album);
+    const result = await uploader.upload(req.file.path);
+    res.json({ url: result.secure_url });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  catch (err) {
+});
+
+// GET: Get image info from Cloudinary
+router.get("/cloudinary/:publicId", async (req, res) => {
+  try {
+    const result = await uploader.explicit(req.params.publicId, { type: "upload" });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE: Remove image from Cloudinary only
+router.delete("/cloudinary/:publicId", async (req, res) => {
+  try {
+    const result = await uploader.destroy(req.params.publicId);
+    if (result.result === "ok") {
+      res.json({ message: "Image deleted from Cloudinary", result });
+    } else {
+      res.status(404).json({ error: "Image not found in Cloudinary" });
+    }
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
