@@ -18,8 +18,8 @@ POST   /                  → Create video
 PATCH  /:id               → Update video
 DELETE /:id               → Delete video
 POST   /upload            → Cloudinary upload only
-GET    /cloudinary/:id    → Get Cloudinary info
-DELETE /cloudinary/:id    → Delete from Cloudinary
+GET    /cloudinary/:publicId    → Get Cloudinary info
+DELETE /cloudinary/:publicId    → Delete from Cloudinary
 */
 
 // MONGODB CRUD

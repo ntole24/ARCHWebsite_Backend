@@ -23,8 +23,8 @@ PATCH  /album/:albumId         → Update album
 DELETE /:albumId/:photoId      → Delete photo
 DELETE /album/:albumId         → Delete album
 POST   /upload                 → Cloudinary upload only
-GET    /cloudinary/:id         → Get Cloudinary info
-DELETE /cloudinary/:id         → Delete from Cloudinary
+GET    /cloudinary/:publicId   → Get Cloudinary info
+DELETE /cloudinary/:publicId   → Delete from Cloudinary
 */
 
 // [MONGODB CRUD]
